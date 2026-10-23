@@ -3104,7 +3104,14 @@
         // through to its own handling (notably Escape closing the overlay).
         handleKeyDown(e) {
             if (!this.doc) return false;
-            const ctrl = e.ctrlKey && !e.altKey;
+            // Ctrl on Windows/Linux, Command on macOS.
+            const isMac = Services.appinfo.OS === "Darwin";
+
+            const ctrl = (
+                isMac
+                    ? e.metaKey && !e.ctrlKey
+                    : e.ctrlKey && !e.metaKey
+            ) && !e.altKey;
 
             // The textarea handles its own keys and stops them propagating; anything
             // arriving here while editing is not meant for the canvas.
