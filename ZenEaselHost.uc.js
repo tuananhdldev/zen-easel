@@ -22,6 +22,20 @@
 (function () {
     const BASE = "chrome://sine/content/zen-easel/";
 
+    // On some Sine builds the background entry is not imported at startup.
+    // Retry the process-global registration from the browser window. The
+    // registry module is cached per process, and register() checks its contract.
+    try {
+        const contract = "@mozilla.org/network/protocol/about;1?what=easel";
+        const registrar = Components.manager.QueryInterface(Ci.nsIComponentRegistrar);
+        if (!registrar.isContractIDRegistered(contract)) {
+            const registry = ChromeUtils.importESModule(BASE + "background/registry.sys.mjs");
+            if (!registrar.isContractIDRegistered(contract)) registry.register();
+        }
+    } catch (e) {
+        console.error("[zen-easel] about:easel registration retry failed:", e);
+    }
+
     // How long after an easel tab closes its board's files are swept — long enough for the page's final save to be queued.
     const CLOSE_SWEEP_DELAY_MS = 2000;
 
@@ -163,19 +177,38 @@
 
         _createToolbarButton() {
             try {
+                // CustomizableUI supports type="button" (not "toolbarbutton").
+                // Place the widget on the toolbar by default, and resolve the host
+                // from the invoking window so multiple Zen windows work correctly.
+                const existing = CustomizableUI.getWidget("zen-easel-button");
+                if (existing?.provider === CustomizableUI.PROVIDER_API) {
+                    if (existing.type === "button") {
+                        return;
+                    }
+                    try {
+                        CustomizableUI.destroyWidget("zen-easel-button");
+                    } catch (e) { }
+                }
                 CustomizableUI.createWidget({
                     id: "zen-easel-button",
-                    type: "toolbarbutton",
-                    label: "Zen Easel",
-                    tooltiptext: "Zen Easel",
-                    onCreated: node => {
-                        if (node) node.addEventListener("click", () => this.openEasel());
+                    type: "button",
+                    defaultArea: CustomizableUI.AREA_NAVBAR,
+                    label: "New Easel",
+                    tooltiptext: "Create a new Easel",
+                    onCommand: event => {
+                        const win = event.target.ownerGlobal;
+                        win.gZenEaselHost?.createEasel().catch(e =>
+                            console.error("[zen-easel] could not create easel from toolbar:", e)
+                        );
                     }
                 });
+                if (!CustomizableUI.getPlacementOfWidget("zen-easel-button")) {
+                    try {
+                        CustomizableUI.addWidgetToArea("zen-easel-button", CustomizableUI.AREA_NAVBAR);
+                    } catch (e) { }
+                }
             } catch (e) {
-                // Already registered by another window — the normal case for every window
-                // after the first, not an error worth surfacing.
-                log("widget not created:", e.message);
+                console.error("[zen-easel] toolbar widget creation failed:", e);
             }
         }
 

@@ -3136,6 +3136,9 @@
 
             if (e.code === "Escape") return this._handleEscape();
             if (ctrl) return this._handleCtrlKey(e);
+            // Leave other Command/Ctrl combinations to the browser instead of
+            // interpreting their letter keys as single-key canvas tools.
+            if (e.metaKey || e.ctrlKey) return false;
             if (e.altKey) return false;
 
             switch (e.code) {
