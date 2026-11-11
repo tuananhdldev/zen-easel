@@ -74,7 +74,7 @@
 
             const view = canvas.view;
             const topLeft = canvas.toScreen(obj.x, obj.y);
-            const fontSize = (obj.text.fontSize || 18) * view.zoom;
+            const fontSize = (obj.text.fontSize || 52) * view.zoom;
 
             Object.assign(area.style, {
                 left: `${topLeft.x}px`,

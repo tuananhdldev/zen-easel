@@ -38,6 +38,10 @@
             this._panel = null;               // { element, anchor, kind }
             this._targetId = null;
             this._dismiss = null;
+            this._lastStyleKey = null;
+            this._lastSize = null;
+            this._lastFill = null;
+            this._lastMarkdown = null;
         }
 
         /* --------------------------------------------------------------- build */
@@ -53,6 +57,14 @@
                 onclick: e => { e.stopPropagation(); this._togglePanel("font"); }
             });
 
+            this._stepUpBtn = this.el("button", {
+                className: "easel-text-step easel-text-step-up",
+                type: "button",
+                title: "Increase text size",
+                textContent: "+",
+                onclick: e => { e.stopPropagation(); this._stepSize(1); }
+            });
+
             // Arc's five paragraph styles (EaselTextStyle: body, h2, h1, h0, ultra).
             // Presets over fontSize rather than a separate axis, so a box nudged off one
             // is simply custom rather than invalid.
@@ -62,6 +74,14 @@
                 title: "Text size",
                 textContent: CUSTOM_LABEL,
                 onclick: e => { e.stopPropagation(); this._togglePanel("size"); }
+            });
+
+            this._stepDownBtn = this.el("button", {
+                className: "easel-text-step easel-text-step-down",
+                type: "button",
+                title: "Decrease text size",
+                textContent: "−",
+                onclick: e => { e.stopPropagation(); this._stepSize(-1); }
             });
 
             // EaselFillStyle.contentHugging — the highlighter.
@@ -84,7 +104,10 @@
 
             this._element = this.el("div", { className: "easel-text-controls" }, [
                 this._fontToggle,
+                this.el("div", { className: "easel-text-divider" }),
+                this._stepUpBtn,
                 this._sizeToggle,
+                this._stepDownBtn,
                 this.el("div", { className: "easel-text-divider" }),
                 this._fillToggle,
                 this._markdownToggle
@@ -118,7 +141,7 @@
                 ? topLeft.x + target.w * view.zoom + GAP
                 : preferredLeft;
 
-            const elementHeight = this._element.offsetHeight || 96;
+            const elementHeight = this._element.offsetHeight || 160;
             const top = Math.max(8, Math.min(
                 topLeft.y + height / 2 - elementHeight / 2,
                 this.root.clientHeight - elementHeight - 8
@@ -135,8 +158,9 @@
         // unconditionally per frame is a style invalidation for a value that changes only
         // when the selection does.
         _reflectState(target) {
+            const currentSize = target.text.fontSize;
             const styleKey = window.ZenEaselObjects.TEXT_STYLES
-                .find(s => s.size === target.text.fontSize)?.key ?? null;
+                .find(s => s.size === currentSize)?.key ?? null;
             if (styleKey !== this._lastStyleKey) {
                 this._lastStyleKey = styleKey;
                 // The button reports which preset the box is on, so the strip answers
@@ -144,6 +168,15 @@
                 const style = window.ZenEaselObjects.TEXT_STYLE_BY_KEY.get(styleKey);
                 this._sizeToggle.textContent = style ? style.label : CUSTOM_LABEL;
                 this._sizeToggle.title = style ? `Text size — ${style.label}` : "Text size";
+            }
+
+            if (currentSize !== this._lastSize) {
+                this._lastSize = currentSize;
+                const styles = window.ZenEaselObjects.TEXT_STYLES;
+                const canIncrease = styles.some(s => s.size > currentSize);
+                const canDecrease = styles.some(s => s.size < currentSize);
+                this._stepUpBtn.classList.toggle("is-disabled", !canIncrease);
+                this._stepDownBtn.classList.toggle("is-disabled", !canDecrease);
             }
 
             const hugging = target.text.fill === "hug";
@@ -184,6 +217,33 @@
             if (!this._targetId || !canvas._byId(this._targetId)) return;
             this.host.tools.fontSize = style.size;
             canvas.setSelectionText({ fontSize: style.size });
+        }
+
+        _stepSize(direction) {
+            const canvas = this.host.canvas;
+            if (!this._targetId || !canvas) return;
+            const target = canvas._byId(this._targetId);
+            if (!target || target.type !== "text") return;
+
+            const styles = window.ZenEaselObjects.TEXT_STYLES;
+            const currentSize = target.text.fontSize || this.host.tools.fontSize;
+
+            let nextStyle = null;
+            if (direction > 0) {
+                nextStyle = styles.find(s => s.size > currentSize);
+            } else {
+                for (let i = styles.length - 1; i >= 0; i--) {
+                    if (styles[i].size < currentSize) {
+                        nextStyle = styles[i];
+                        break;
+                    }
+                }
+            }
+
+            if (nextStyle) {
+                this._applyStyle(nextStyle);
+                this._closePanel();
+            }
         }
 
         _applyFont(font) {

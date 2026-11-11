@@ -983,12 +983,57 @@ audio.easel-media-item {
 /* The size button carries a word, not a glyph. Sized so the longest of Arc's five
    style names, "Ultra", still fits the 36px column without the strip widening. */
 .easel-text-size {
+  height: 24px;
   font-family: inherit;
   font-size: 11px;
   letter-spacing: -0.01em;
   border-top: 1px solid var(--easel-panel-border);
   border-bottom: 1px solid var(--easel-panel-border);
   border-radius: 0;
+}
+
+/* Stepper + and − buttons for changing text size */
+.easel-text-step {
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--easel-text);
+  font: inherit;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms var(--easel-ease), opacity 120ms var(--easel-ease);
+}
+
+.easel-text-step-up {
+  border-radius: 8px 8px 0 0;
+}
+
+.easel-text-step-down {
+  border-radius: 0 0 8px 8px;
+}
+
+.easel-text-step:hover {
+  background: var(--easel-hover-bg);
+}
+
+.easel-text-step:active:not(.is-disabled) {
+  background: var(--easel-hover-bg);
+}
+
+.easel-text-step.is-disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.easel-text-step.is-disabled:hover {
+  background: transparent;
 }
 
 /* ------------------------------------------------------------------- highlight */

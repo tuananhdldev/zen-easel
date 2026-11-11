@@ -50,6 +50,8 @@
     }
 
     const DEFAULT_COLOR = "#000000";
+    const DEFAULT_TEXT_COLOR = "#ffffff";
+    const DEFAULT_TEXT_SIZE = 52;
 
     // What reads as "no colour chosen yet" against Zen's own chrome: white on a dark theme, black
     // on a light one. Both the pen's starting colour and the board's fall through this, so a fresh
@@ -382,6 +384,7 @@
     function createObject(type, props = {}) {
         const now = Date.now();
         const size = DEFAULT_SIZE[type] || { w: 160, h: 120 };
+        const defaultColor = type === "text" ? DEFAULT_TEXT_COLOR : DEFAULT_COLOR;
         const obj = {
             id: uuid(),
             type,
@@ -393,14 +396,14 @@
             // hovered, selected, dragged, resized or edited. Right-click still finds it —
             // that is the only way back to one, and the only way to unlock it.
             locked: false,
-            color: DEFAULT_COLOR,
+            color: props.color || defaultColor,
             createdAt: now,
             updatedAt: now,
             ...props
         };
 
         if (type === "text" && !obj.text) {
-            obj.text = { content: "", fontSize: 24, fontFamily: "system", align: "left" };
+            obj.text = { content: "", fontSize: DEFAULT_TEXT_SIZE, fontFamily: "system", align: "left" };
         }
         if (type === "shape" && !obj.shape) {
             obj.shape = { kind: "rectangle", strokeWidth: 6, filled: false };
@@ -758,7 +761,7 @@
         // Hex on every board written since colours stopped being palette keys; the legacy lookup is what carries an older one across.
         obj.color = normalizeColor(obj.color) ||
             (LEGACY_PALETTES[legacyPalette] || LEGACY_PALETTES.vibrant)[obj.color] ||
-            DEFAULT_COLOR;
+            (obj.type === "text" ? DEFAULT_TEXT_COLOR : DEFAULT_COLOR);
 
         if (obj.type === "text") {
             if (!obj.text || typeof obj.text !== "object") obj.text = {};
@@ -777,7 +780,7 @@
                 obj.text.content = obj.text.content.slice(0, MAX_TEXT_LENGTH);
             }
             delete obj.text.html;
-            obj.text.fontSize = num(obj.text.fontSize, 32);
+            obj.text.fontSize = num(obj.text.fontSize, DEFAULT_TEXT_SIZE);
             if (!FONT_BY_KEY.has(obj.text.fontFamily)) obj.text.fontFamily = "system";
             if (!TEXT_FILLS.includes(obj.text.fill)) obj.text.fill = "none";
             // Coerced like locked: the renderer branches on it, and a hand-edited "yes" must not count.
@@ -946,6 +949,8 @@
     window.ZenEaselObjects = {
         STANDARD_ROWS,
         DEFAULT_COLOR,
+        DEFAULT_TEXT_COLOR,
+        DEFAULT_TEXT_SIZE,
         RECENT_LIMIT,
         normalizeColor,
         hexToHsv,

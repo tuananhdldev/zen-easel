@@ -682,7 +682,7 @@
             ctx.textAlign = obj.text.align === "center" ? "center"
                 : obj.text.align === "right" ? "right" : "left";
 
-            const fontSize = obj.text.fontSize || 32;
+            const fontSize = obj.text.fontSize || 52;
             const lineHeight = fontSize * LINE_HEIGHT;
             const lines = this.wrapText(ctx, content, obj.w - TEXT_PAD_X * 2, font);
             const originX = obj.text.align === "center" ? obj.x + obj.w / 2
@@ -745,7 +745,7 @@
             const rgb = this.Objects.rgbOf(color) || [0, 0, 0];
             const tint = alpha => `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
             const hugging = obj.text.fill === "hug";
-            const fontSize = obj.text.fontSize || 32;
+            const fontSize = obj.text.fontSize || 52;
 
             ctx.save();
             ctx.translate(obj.x, obj.y);
@@ -834,7 +834,7 @@
         _markdownLayout(obj) {
             return window.ZenEaselMarkdown.layoutFor(obj, this.staticCtx, {
                 width: obj.w,
-                fontSize: obj.text.fontSize || 32,
+                fontSize: obj.text.fontSize || 52,
                 fontCss: this.Objects.fontCss(obj.text.fontFamily),
                 align: obj.text.align || "left",
                 lineHeight: LINE_HEIGHT,
@@ -1546,7 +1546,7 @@
         /* ---------------------------------------------------------------- text */
 
         _fontString(obj) {
-            return `${obj.text.fontSize || 18}px ${this.Objects.fontCss(obj.text.fontFamily)}`;
+            return `${obj.text.fontSize || 52}px ${this.Objects.fontCss(obj.text.fontFamily)}`;
         }
 
         // The families themselves are registered once via the FontFace API (see
@@ -1618,7 +1618,7 @@
             this._ensureFont(font);
             ctx.font = font;
             const lines = this.wrapText(ctx, obj.text.content || "", obj.w - TEXT_PAD_X * 2, font);
-            const lineHeight = (obj.text.fontSize || 18) * LINE_HEIGHT;
+            const lineHeight = (obj.text.fontSize || 52) * LINE_HEIGHT;
             return Math.max(lines.length * lineHeight + TEXT_PAD_Y * 2, lineHeight + TEXT_PAD_Y * 2);
         }
 

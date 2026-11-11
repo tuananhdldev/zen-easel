@@ -685,12 +685,13 @@
         // it through pseudo-HTML only produced "&amp;" artefacts.
         _addTextObject(text, at) {
             const canvas = this.host.canvas;
-            const obj = window.ZenEaselObjects.createObject("text", {
+            const Objects = window.ZenEaselObjects;
+            const obj = Objects.createObject("text", {
                 x: Math.round(at.x), y: Math.round(at.y), w: canvas.constructor.TEXT_BOX_WIDTH,
-                color: this.host.tools.color,
+                color: this.host.tools.textColor || Objects.DEFAULT_TEXT_COLOR || "#ffffff",
                 text: {
                     content: text,
-                    fontSize: this.host.tools.fontSize,
+                    fontSize: this.host.tools.fontSize || Objects.DEFAULT_TEXT_SIZE || 52,
                     fontFamily: this.host.tools.fontFamily || "system",
                     align: "left",
                     markdown: !!this.host.tools.markdown

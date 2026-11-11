@@ -196,7 +196,7 @@
                     label: "New Easel",
                     tooltiptext: "Create a new Easel",
                     onCommand: event => {
-                        const win = event.target.ownerGlobal;
+                        const win = event.target.ownerDocument.defaultView;
                         win.gZenEaselHost?.createEasel().catch(e =>
                             console.error("[zen-easel] could not create easel from toolbar:", e)
                         );

@@ -749,6 +749,7 @@
                 x: Math.round((pageWidth - width) / 2),
                 y: TITLE_TOP,
                 w: width,
+                color: Objects.DEFAULT_TEXT_COLOR || "#ffffff",
                 text: {
                     content: doc.title || "Untitled Easel",
                     fontSize: size,
@@ -3047,11 +3048,11 @@
                 x: Math.round(centre.x - (at ? 0 : width / 2)),
                 y: Math.round(centre.y),
                 w: width,
-                color: tools.color,
+                color: tools.textColor || this.Objects.DEFAULT_TEXT_COLOR || "#ffffff",
                 opacity: tools.opacity,
                 text: {
                     content: "Textbox",
-                    fontSize: tools.fontSize,
+                    fontSize: tools.fontSize || this.Objects.DEFAULT_TEXT_SIZE || 52,
                     fontFamily: tools.fontFamily,
                     align: "left",
                     markdown: !!tools.markdown
@@ -3157,6 +3158,26 @@
                 case "ArrowLeft":
                 case "ArrowRight":
                     return this._handleArrow(e);
+
+                case "Equal":
+                case "NumpadAdd": {
+                    const only = this.selection.size === 1 ? this._byId([...this.selection][0]) : null;
+                    if (only && only.type === "text" && this.host.textControls) {
+                        this.host.textControls._stepSize(1);
+                        return true;
+                    }
+                    break;
+                }
+
+                case "Minus":
+                case "NumpadSubtract": {
+                    const only = this.selection.size === 1 ? this._byId([...this.selection][0]) : null;
+                    if (only && only.type === "text" && this.host.textControls) {
+                        this.host.textControls._stepSize(-1);
+                        return true;
+                    }
+                    break;
+                }
             }
 
             if (e.shiftKey) return false;
@@ -3806,6 +3827,10 @@
 
             if (piggyback) this._touch();
             else this.commitMutation();
+
+            if (editing && this.host.textEditor && this.host.textEditor.reposition) {
+                this.host.textEditor.reposition();
+            }
 
             this.invalidate();
             return true;

@@ -63,6 +63,7 @@
             // White on a dark Zen theme, black on a light one. A fixed black default was invisible
             // on a dark board, which is the board a dark browser comes up on.
             this.color = this._themeColor();
+            this.textColor = window.ZenEaselObjects.DEFAULT_TEXT_COLOR || "#ffffff";
             this.strokeWidth = 8;
             // Fully opaque, like every object created before there was a slider. Kept as
             // a toolbar default alongside colour and stroke width, so the next thing drawn
@@ -71,9 +72,8 @@
             // Whether a newly drawn shape is a solid block or an outline. Set from the
             // floating shape controls, the way fontSize is set from the text ones.
             this.shapeFilled = false;
-            // Arc's Body size. The old 24 was legible, but nothing like the confident
-            // lettering Arc's easels have.
-            this.fontSize = 32;
+            // Arc's H2 size (52px).
+            this.fontSize = window.ZenEaselObjects.DEFAULT_TEXT_SIZE || 52;
             this.fontFamily = "system";
             // Whether the next text box renders its content as Markdown; set from the text controls like the font.
             this.markdown = false;
@@ -179,8 +179,12 @@
 
             // Whatever is selected wins over the toolbar's remembered default: the panel is about to *change* those objects, so
             // it has to start where they are. A mixed selection has no single answer and falls back to the default.
+            const isText = this.active === "text" || (this.host.canvas?.selection?.size &&
+                [...this.host.canvas.selection].some(id => this.host.canvas._byId(id)?.type === "text")) ||
+                this.host.textEditor?.isEditing;
+            const defaultPickerColor = isText ? this.textColor : this.color;
             const picker = new window.ZenEaselColorPicker({
-                color: this._selectionColor() ?? this.color,
+                color: this._selectionColor() ?? defaultPickerColor,
                 alpha: this._selectionOpacity() ?? this.opacity,
                 alphaLabel: "Opacity",
                 // The floor is not zero: a fully invisible object is still on the board and still in the way — see OPACITY.
@@ -347,7 +351,8 @@
         _syncColorDot() {
             if (!this._colorButton) return;
             const dot = this._colorButton.firstElementChild;
-            dot.style.background = window.ZenEaselObjects.colorCss(this.color);
+            const activeColor = this.active === "text" ? (this.textColor || "#ffffff") : this.color;
+            dot.style.background = window.ZenEaselObjects.colorCss(activeColor);
             const size = 10 + this.strokeWidth;
             dot.style.width = `${size}px`;
             dot.style.height = `${size}px`;
@@ -475,6 +480,24 @@
         // the wheel.
         setColor(color, live = false) {
             this.color = color;
+            const canvas = this.host.canvas;
+            let textActive = this.active === "text";
+            if (canvas) {
+                if (canvas.host?.textEditor?.isEditing) {
+                    textActive = true;
+                } else if (canvas.selection) {
+                    for (const id of canvas.selection) {
+                        const obj = canvas._byId(id);
+                        if (obj && obj.type === "text") {
+                            textActive = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (textActive) {
+                this.textColor = color;
+            }
             this.host.canvas.setSelectionColor(color, live);
             if (live) {
                 this._syncColorDot();
