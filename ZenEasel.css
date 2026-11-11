@@ -1044,6 +1044,39 @@ audio.easel-media-item {
   background: var(--easel-panel-border);
 }
 
+.easel-text-color {
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms var(--easel-ease);
+}
+
+.easel-text-color:hover,
+.easel-text-color.is-open {
+  background: var(--easel-hover-bg);
+}
+
+.easel-text-color-dot {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--easel-panel-border) inset, 0 0 0 1px rgba(0, 0, 0, 0.12) inset;
+  transition: background 120ms var(--easel-ease);
+}
+
+.easel-text-color-popup {
+  position: absolute;
+  z-index: 6;
+}
+
 .easel-text-fill {
   height: 26px;
   padding: 0;

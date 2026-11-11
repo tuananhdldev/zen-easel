@@ -35,11 +35,12 @@
             this.el = window.ZenEaselUtil.el;
 
             this._element = null;
-            this._panel = null;               // { element, anchor, kind }
+            this._panel = null;               // { element, anchor, kind, picker }
             this._targetId = null;
             this._dismiss = null;
             this._lastStyleKey = null;
             this._lastSize = null;
+            this._lastColor = null;
             this._lastFill = null;
             this._lastMarkdown = null;
         }
@@ -60,7 +61,7 @@
             this._stepUpBtn = this.el("button", {
                 className: "easel-text-step easel-text-step-up",
                 type: "button",
-                title: "Increase text size",
+                title: "Increase text size (+)",
                 textContent: "+",
                 onclick: e => { e.stopPropagation(); this._stepSize(1); }
             });
@@ -79,10 +80,18 @@
             this._stepDownBtn = this.el("button", {
                 className: "easel-text-step easel-text-step-down",
                 type: "button",
-                title: "Decrease text size",
+                title: "Decrease text size (-)",
                 textContent: "−",
                 onclick: e => { e.stopPropagation(); this._stepSize(-1); }
             });
+
+            this._colorDot = this.el("span", { className: "easel-text-color-dot" });
+            this._colorToggle = this.el("button", {
+                className: "easel-text-color",
+                type: "button",
+                title: "Text colour",
+                onclick: e => { e.stopPropagation(); this._togglePanel("color"); }
+            }, [this._colorDot]);
 
             // EaselFillStyle.contentHugging — the highlighter.
             this._fillToggle = this.el("button", {
@@ -109,6 +118,7 @@
                 this._sizeToggle,
                 this._stepDownBtn,
                 this.el("div", { className: "easel-text-divider" }),
+                this._colorToggle,
                 this._fillToggle,
                 this._markdownToggle
             ]);
@@ -141,7 +151,7 @@
                 ? topLeft.x + target.w * view.zoom + GAP
                 : preferredLeft;
 
-            const elementHeight = this._element.offsetHeight || 160;
+            const elementHeight = this._element.offsetHeight || 190;
             const top = Math.max(8, Math.min(
                 topLeft.y + height / 2 - elementHeight / 2,
                 this.root.clientHeight - elementHeight - 8
@@ -177,6 +187,16 @@
                 const canDecrease = styles.some(s => s.size < currentSize);
                 this._stepUpBtn.classList.toggle("is-disabled", !canIncrease);
                 this._stepDownBtn.classList.toggle("is-disabled", !canDecrease);
+            }
+
+            const currentColor = target.color || this.host.tools.textColor || "#ffffff";
+            if (currentColor !== this._lastColor) {
+                this._lastColor = currentColor;
+                this._colorDot.style.background = window.ZenEaselObjects.colorCss(currentColor);
+            }
+
+            if (this._panel && this._panel.kind === "color" && this._panel.picker && !this.host.canvas?._colorLive) {
+                this._panel.picker.sync({ color: currentColor, alpha: target.opacity ?? 1 });
             }
 
             const hugging = target.text.fill === "hug";
@@ -252,6 +272,39 @@
             canvas.setSelectionText({ fontFamily: font.key });
         }
 
+        _applyColor(color, live = false) {
+            const canvas = this.host.canvas;
+            if (!this._targetId || !canvas) return;
+            const target = canvas._byId(this._targetId);
+            if (!target) return;
+
+            const normalized = window.ZenEaselObjects.normalizeColor(color) || "#ffffff";
+            this.host.tools.textColor = normalized;
+            this.host.tools.color = normalized;
+            this._colorDot.style.background = window.ZenEaselObjects.colorCss(normalized);
+            this.host.tools._syncColorDot();
+
+            canvas.setSelectionColor(normalized, live);
+            if (this.host.textEditor?.isEditing) {
+                this.host.textEditor.reposition();
+            }
+        }
+
+        _applyOpacity(opacity, live = false) {
+            const canvas = this.host.canvas;
+            if (!this._targetId || !canvas) return;
+            const target = canvas._byId(this._targetId);
+            if (!target) return;
+
+            const clamped = window.ZenEaselObjects.clampOpacity(opacity);
+            this.host.tools.opacity = clamped;
+
+            canvas.setSelectionOpacity(clamped, live);
+            if (this.host.textEditor?.isEditing) {
+                this.host.textEditor.reposition();
+            }
+        }
+
         _toggleFill() {
             const canvas = this.host.canvas;
             const target = this._targetId && canvas._byId(this._targetId);
@@ -271,16 +324,65 @@
 
         /* ---------------------------------------------------------- the panel */
 
-        // One popup, two contents. Reopening the panel that is already showing closes
-        // it; opening the other one swaps straight across without a flash of nothing.
+        // One popup, three contents. Reopening the panel that is already showing closes
+        // it; opening another swaps straight across without a flash of nothing.
         _togglePanel(kind) {
             const open = this._panel && this._panel.kind === kind;
             this._closePanel();
             if (open) return;
 
+            if (kind === "color") {
+                this._openColorPanel();
+                return;
+            }
+
             const rows = kind === "font" ? this._fontRows() : this._sizeRows();
             const anchor = kind === "font" ? this._fontToggle : this._sizeToggle;
             this._openPanel(kind, anchor, rows);
+        }
+
+        _openColorPanel() {
+            const canvas = this.host.canvas;
+            if (!canvas) return;
+            const target = this._targetId && canvas._byId(this._targetId);
+            const currentColor = target ? target.color : (this.host.tools.textColor || "#ffffff");
+            const currentOpacity = target && target.opacity !== undefined ? target.opacity : (this.host.tools.opacity ?? 1);
+            const anchor = this._colorToggle;
+            const Objects = window.ZenEaselObjects;
+
+            const picker = new window.ZenEaselColorPicker({
+                color: currentColor,
+                alpha: currentOpacity,
+                alphaLabel: "Opacity",
+                alphaMin: Math.round(Objects.OPACITY.min * 100),
+                alphaStep: Math.round(Objects.OPACITY.step * 100),
+                standardRows: Objects.STANDARD_ROWS,
+                recents: canvas.recentColors || [],
+                onColor: (hex, live) => {
+                    this._applyColor(hex, live);
+                },
+                onAlpha: (value, live) => {
+                    this._applyOpacity(value, live);
+                },
+                onRestore: (hex, value) => {
+                    this._applyColor(hex, false);
+                    this._applyOpacity(value, false);
+                }
+            });
+
+            const panel = this.el("div", { className: "easel-popup is-flyout easel-text-color-popup" }, [picker.element]);
+            this.root.appendChild(panel);
+            this._panel = { element: panel, anchor, kind: "color", picker };
+            anchor.classList.add("is-open");
+            this._positionPanel(parseFloat(this._element.style.left) || 0);
+            this.host.chromeChanged();
+
+            this._dismiss = event => {
+                const path = event.composedPath();
+                if (path.includes(panel) || path.includes(anchor)) return;
+                this._closePanel();
+            };
+            this.host.shadowRoot.addEventListener("pointerdown", this._dismiss, true);
         }
 
         _fontRows() {
@@ -349,7 +451,10 @@
             if (!this._panel || !this._element) return;
             const panel = this._panel.element;
 
-            const width = panel.offsetWidth || 190;
+            const isColor = this._panel.kind === "color";
+            const width = panel.offsetWidth || (isColor ? 290 : 190);
+            const height = panel.offsetHeight || (isColor ? 350 : 200);
+
             const toLeft = stepperLeft - width - 8;
             panel.style.left = toLeft < 8
                 ? `${stepperLeft + STEPPER_WIDTH + 8}px`
@@ -359,11 +464,15 @@
             // size list does not sit over the typeface button and vice versa.
             const stripTop = parseFloat(this._element.style.top) || 0;
             const top = stripTop + this._panel.anchor.offsetTop;
-            panel.style.top = `${Math.max(8, Math.min(top, this.root.clientHeight - panel.offsetHeight - 8))}px`;
+            panel.style.top = `${Math.max(8, Math.min(top, this.root.clientHeight - height - 8))}px`;
         }
 
         _closePanel() {
             if (!this._panel) return;
+            if (this._panel.kind === "color") {
+                this.host.canvas?.endColorDrag();
+                this.host.canvas?.endOpacityDrag();
+            }
             this._panel.element.remove();
             this._panel.anchor.classList.remove("is-open");
             this._panel = null;

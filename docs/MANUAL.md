@@ -311,6 +311,7 @@ property of the thing you are looking at:
 | **Aa** | typeface list, each row previewed in its own face |
 | **+** / **−** | step text size up or down through the preset styles |
 | **Body** / **H2** / **H1** / **H0** / **Ultra** | opens Arc's five paragraph styles — 32, 52, 80, 120 and 180px. Defaults to H2 (52px) with white lettering. The button is labelled with the size the box is currently on, or **··** when it is on none of them |
+| **Colour swatch** | opens the colour wheel, presets, and opacity for text |
 | **▮** | the highlighter |
 | **M↓** | Markdown mode for the box |
 

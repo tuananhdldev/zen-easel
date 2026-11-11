@@ -220,9 +220,11 @@
             // the behaviour it has always had.
             const next = event && event.relatedTarget;
             if (next && next.closest &&
-                next.closest(".easel-text-controls, .easel-font-panel")) {
-                // Handed straight back, or the next keystroke would go nowhere.
-                this._element.focus({ preventScroll: true });
+                next.closest(".easel-text-controls, .easel-font-panel, .easel-popup")) {
+                // Handed straight back, unless focus moved to an input (such as the hex field).
+                if (next.localName !== "input") {
+                    this._element.focus({ preventScroll: true });
+                }
                 return;
             }
 
