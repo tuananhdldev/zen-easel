@@ -1907,6 +1907,41 @@
         // take it down. At most one exists per window — one pointer, one hover.
         liveShowChrome(easelId, spec) { this.live?.showChrome(easelId, spec); }
 
+        async transferEaselBackup(restore) {
+            if (this._backupInProgress) return null;
+            this._backupInProgress = true;
+            try {
+                const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+                picker.init(window.browsingContext, restore ? "Restore Easels" : "Back Up Easels",
+                    restore ? Ci.nsIFilePicker.modeOpen : Ci.nsIFilePicker.modeSave);
+                picker.appendFilter("Easel backup (ZIP)", "*.zip");
+                if (!restore) {
+                    picker.defaultExtension = "zip";
+                    picker.defaultString = "Zen Easel Backup.zip";
+                }
+                const result = await new Promise(resolve => picker.open(resolve));
+                if (result === Ci.nsIFilePicker.returnCancel || !picker.file) return null;
+
+                const { EaselStore } = ChromeUtils.importESModule(BASE + "background/store.sys.mjs");
+                if (restore) return await EaselStore.restoreFromBackup(picker.file.path);
+
+                const flushes = [];
+                for (const win of Services.wm.getEnumerator("navigator:browser")) {
+                    const host = win.gZenEaselHost;
+                    if (!host) continue;
+                    for (const tab of win.gBrowser.tabs) {
+                        const page = host._pageFor(tab);
+                        if (page?.element?.store) flushes.push(page.element.flush());
+                    }
+                }
+                await Promise.all(flushes);
+                await EaselStore.flush();
+                return await EaselStore.backupTo(picker.file.path);
+            } finally {
+                this._backupInProgress = false;
+            }
+        }
+
         // Saves an exported board. The page renders the pixels and the window writes the
         // file: a file picker is chrome UI, and keeping the one filesystem write on this
         // side means the page never needs a path at all — it hands over bytes and a

@@ -23,8 +23,9 @@ An infinite canvas at `about:easel` for screenshots, web pages, text, drawings, 
 Requires [Sine](https://github.com/CosmoCreeper/Sine). The Easels list is a section of Zen's own Library.
 
 1. Enable unofficial sources.
-2. Add this repository's URL.
-3. Restart Zen.
+2. Enable JavaScript for unofficial mods in Sine (`sine.allow-unsafe-js` in Zen's `about:config`). This setting lets all enabled unofficial Sine mods run privileged JavaScript.
+3. Add this repository's URL and make sure Zen Easel is enabled.
+4. Quit Zen completely and reopen it. Choose **New Easel** from the sidebar **+** menu.
 
 ## Opening a board
 
@@ -82,6 +83,12 @@ Picking **Easel** opens a menu of your boards, most recently used first, plus *N
 ## Export
 
 - `Ctrl`+`Shift`+`S`
+
+## Backup and restore
+
+Open the board switcher and choose **Back up all easels…** to save a ZIP with your boards, previews, and attachments. If the top bar is hidden, right-click the canvas and open **Easels**.
+
+Choose **Restore easels as copies…** and select the ZIP. The restored boards appear alongside your current boards. Files linked from disk still use their original paths, so keep a separate copy of those files.
 
 ## Storage
 

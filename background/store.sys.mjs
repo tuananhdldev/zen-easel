@@ -32,9 +32,14 @@ import {
 // A system module is not a window: it has no timers of its own, and the DOM globals a
 // window script takes for granted are simply absent here. Both of these have to be
 // imported explicitly.
+import { FileUtils } from "resource://gre/modules/FileUtils.sys.mjs";
+import { NetUtil } from "resource://gre/modules/NetUtil.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const INDEX_VERSION = 1;
+const BACKUP_PREFIX = "zen-easel-v1";
+const BACKUP_BOARDS = `${BACKUP_PREFIX}/easels/`;
+const BACKUP_ASSETS = `${BACKUP_PREFIX}/assets/`;
 
 // How long an unreferenced asset is left alone before the sweep will delete it. Without
 // this the sweep would race object creation: saveAsset writes the file, then the object
@@ -74,6 +79,36 @@ function retitleDocument(doc, title, now) {
     if (typeof doc.titleObjectId !== "string" || !Array.isArray(doc.objects)) return;
     const heading = doc.objects.find(object => object && object.id === doc.titleObjectId);
     if (heading?.text && typeof heading.text === "object") heading.text.content = title;
+}
+
+function referencedAssets(objects) {
+    const names = new Set();
+    for (const object of objects) {
+        for (const name of [
+            object?.image?.asset, object?.media?.asset, object?.file?.asset,
+            object?.webcard?.asset, object?.webBrowser?.poster
+        ]) {
+            if (isSafeAssetName(name)) names.add(name);
+        }
+    }
+    return names;
+}
+
+async function copyZipEntry(reader, name, path) {
+    // Stream bytes into a regular file. ZIP entries may carry symlink and permission metadata.
+    // Gecko's stream checks the CRC while inflating, but skips it for stored entries.
+    if (reader.getEntry(name).compression === 0) reader.test(name);
+    const output = FileUtils.openFileOutputStream(new FileUtils.File(path));
+    try {
+        await new Promise((resolve, reject) => {
+            NetUtil.asyncCopy(reader.getInputStream(name), output, status => {
+                if (Components.isSuccessCode(status)) resolve();
+                else reject(new Error("Could not read a file from the Easel backup"));
+            });
+        });
+    } finally {
+        output.close();
+    }
 }
 
 class EaselStoreImpl {
@@ -274,9 +309,149 @@ class EaselStoreImpl {
         return this._writing;
     }
 
-    async _writeIndexNow() {
+    async _writeIndexNow(index = this._index) {
         const path = this._indexPath();
-        await IOUtils.writeJSON(path, this._index, { tmpPath: `${path}.tmp` });
+        await IOUtils.writeJSON(path, index, { tmpPath: `${path}.tmp` });
+    }
+
+    /* ------------------------------------------------------------ backups */
+
+    async backupTo(destination) {
+        await this.init();
+        const target = new FileUtils.File(destination);
+        const storage = new FileUtils.File(this.root);
+        if (storage.equals(target) || storage.contains(target)) {
+            throw new Error("Choose a backup location outside Easel storage");
+        }
+
+        // Wait for asset moves as well as document writes before taking the snapshot.
+        return this._onTrashChain(() => {
+            const run = () => this._writeBackup(destination);
+            this._writing = this._writing.then(run, run);
+            return this._writing;
+        });
+    }
+
+    async _writeBackup(destination) {
+        const ids = this._index.easels.map(entry => entry.id);
+        if (!ids.length) throw new Error("There are no easels to back up");
+
+        const temporary = new FileUtils.File(PathUtils.join(PathUtils.parent(destination), ".zen-easel-backup.tmp"));
+        const writer = Cc["@mozilla.org/zipwriter;1"].createInstance(Ci.nsIZipWriter);
+        // Write next to the destination, so an incomplete ZIP cannot replace a prior backup.
+        temporary.createUnique(Ci.nsIFile.NORMAL_FILE_TYPE, 0o600);
+        try {
+            writer.open(temporary, FileUtils.MODE_WRONLY | FileUtils.MODE_TRUNCATE);
+            try {
+                const add = (name, path) => writer.addEntryFile(
+                    name, Ci.nsIZipWriter.COMPRESSION_NONE, new FileUtils.File(path), false
+                );
+                for (const id of ids) {
+                    const path = this._easelPath(id);
+                    const doc = await IOUtils.readJSON(path);
+                    add(`${BACKUP_BOARDS}${id}.json`, path);
+
+                    const thumb = this._thumbPath(id);
+                    if (await IOUtils.exists(thumb)) add(`${BACKUP_BOARDS}${id}.thumb.png`, thumb);
+
+                    for (const name of referencedAssets(doc.objects || [])) {
+                        const asset = this._assetPath(id, name);
+                        const source = await IOUtils.exists(asset)
+                            ? asset : PathUtils.join(this._trashDir(id), name);
+                        if (!(await IOUtils.exists(source))) {
+                            throw new Error(`Missing attachment in "${doc.title || "Untitled Easel"}": ${name}`);
+                        }
+                        add(`${BACKUP_ASSETS}${id}/${name}`, source);
+                    }
+                }
+            } finally {
+                writer.close();
+            }
+            await IOUtils.move(temporary.path, destination);
+            return ids.length;
+        } finally {
+            await this._removeBackupFile(temporary.path);
+        }
+    }
+
+    async restoreFromBackup(source) {
+        await this.init();
+        const run = () => this._restoreBackup(source);
+        this._writing = this._writing.then(run, run);
+        return this._writing;
+    }
+
+    async _restoreBackup(source) {
+        const reader = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
+        const staged = [];
+        reader.open(new FileUtils.File(source));
+        try {
+            const names = reader.findEntries(`${BACKUP_BOARDS}*.json`);
+            while (names.hasMore()) {
+                const name = names.getNext();
+                const original = name.slice(BACKUP_BOARDS.length, -".json".length);
+                if (!isSafeId(original)) throw new Error("Invalid board name in Easel backup");
+
+                const id = uuid();
+                const boardPath = this._easelPath(id);
+                const thumbPath = this._thumbPath(id);
+                const assets = this._assetDir(id);
+                const paths = [boardPath, thumbPath, assets];
+                const board = { paths, entry: null };
+                staged.push(board);
+
+                await copyZipEntry(reader, name, boardPath);
+                const doc = await IOUtils.readJSON(boardPath);
+                if (!doc || doc.id !== original || !Array.isArray(doc.objects)) {
+                    throw new Error("Invalid board data in Easel backup");
+                }
+                doc.id = id;
+                await IOUtils.writeJSON(boardPath, doc);
+
+                const thumb = `${BACKUP_BOARDS}${original}.thumb.png`;
+                if (reader.hasEntry(thumb)) await copyZipEntry(reader, thumb, thumbPath);
+
+                const attachments = referencedAssets(doc.objects);
+                if (attachments.size) await IOUtils.makeDirectory(assets);
+                for (const asset of attachments) {
+                    await copyZipEntry(reader, `${BACKUP_ASSETS}${original}/${asset}`, this._assetPath(id, asset));
+                }
+                board.entry = {
+                    id,
+                    title: typeof doc.title === "string" ? doc.title : "Untitled Easel",
+                    createdAt: Number.isFinite(doc.createdAt) ? doc.createdAt : Date.now(),
+                    updatedAt: Number.isFinite(doc.updatedAt) ? doc.updatedAt : Date.now(),
+                    lastOpenedAt: 0,
+                    objectCount: doc.objects.length
+                };
+            }
+            if (!staged.length) throw new Error("This ZIP contains no supported Easel boards");
+
+            // Publish only after all boards and attachments have been restored. Keep any
+            // changes made to the current index while the ZIP was being read.
+            const entries = staged.map(board => board.entry);
+            await this._writeIndexNow({
+                ...this._index,
+                easels: [...this._index.easels, ...entries]
+            });
+            this._index.easels.push(...entries);
+            return entries.length;
+        } catch (error) {
+            for (const { paths } of staged) {
+                for (const path of paths) await this._removeBackupFile(path);
+            }
+            throw error;
+        } finally {
+            reader.close();
+        }
+    }
+
+    async _removeBackupFile(path) {
+        try {
+            await IOUtils.remove(path, { recursive: true, ignoreAbsent: true });
+        } catch (error) {
+            console.error("[zen-easel] could not clean up a backup file:", error);
+        }
     }
 
     /* ---------------------------------------------------------- documents */
@@ -767,19 +942,7 @@ class EaselStoreImpl {
             return 0;
         }
 
-        // Every field anywhere in the document that names a file in this directory. A
-        // field missing from this list is not a leak — it is the opposite, and worse: the
-        // sweep would see a file nothing claims and delete something still in use.
-        const used = new Set(keep || []);
-        for (const obj of objects) {
-            if (obj && obj.image && obj.image.asset) used.add(obj.image.asset);
-            if (obj && obj.media && obj.media.asset) used.add(obj.media.asset);
-            if (obj && obj.file && obj.file.asset) used.add(obj.file.asset);
-            if (obj && obj.webcard && obj.webcard.asset) used.add(obj.webcard.asset);
-            // A web tile's poster. Rewritten every time a tile is stopped, so the ones it
-            // replaces are exactly what this sweep is for — but only the ones it replaces.
-            if (obj && obj.webBrowser && obj.webBrowser.poster) used.add(obj.webBrowser.poster);
-        }
+        const used = new Set([...(keep || []), ...referencedAssets(objects)]);
 
         const now = Date.now();
         let retryIn = 0;

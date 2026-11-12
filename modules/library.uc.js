@@ -318,7 +318,10 @@
                 this.el("div", { className: "easel-list-separator" }),
                 this._action(dismiss, "New easel", () => this.createNew()),
                 this._action(dismiss, "Rename this easel", () => this.renameCurrent()),
-                this._action(dismiss, "Delete this easel", () => this.deleteCurrent(), true)
+                this._action(dismiss, "Delete this easel", () => this.deleteCurrent(), true),
+                this.el("div", { className: "easel-list-separator" }),
+                this._action(dismiss, "Back up all easels…", () => this.transferBackup(false)),
+                this._action(dismiss, "Restore easels as copies…", () => this.transferBackup(true))
             );
             return rows;
         }
@@ -347,6 +350,21 @@
         }
 
         /* --------------------------------------------------------- operations */
+
+        async transferBackup(restore) {
+            try {
+                const count = await this.host.bridge?.transferEaselBackup(restore);
+                if (count == null) return;
+
+                const boards = count === 1 ? "1 easel" : `${count} easels`;
+                this.host.toast(restore ? `Restored ${boards} as copies` : `Backed up ${boards}`,
+                    { dismissAfter: 4000 });
+            } catch (error) {
+                console.error("[zen-easel] backup transfer failed:", error);
+                this.host.toast(restore ? "Could not restore this Easel backup" :
+                    `Could not back up easels: ${error.message}`, { dismissAfter: 6000 });
+            }
+        }
 
         // Opens the board in its own tab rather than replacing this one's.
         //
